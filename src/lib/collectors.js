@@ -4,6 +4,7 @@ const switcher = require("./utils/torswitcher")
 const {extractSharedData} = require("./utils/body")
 const {TtlCache, RequestCache, UserRequestCache} = require("./cache")
 const RequestHistory = require("./structures/RequestHistory")
+const fhp = require("fast-html-parser")
 const db = require("./db")
 require("./testimports")(constants, request, extractSharedData, UserRequestCache, RequestHistory, db)
 
@@ -398,6 +399,7 @@ async function getOrFetchShortcode(shortcode) {
 		const {result, fromCache} = await fetchShortcodeData(shortcode)
 		const entry = getOrCreateShortcode(shortcode)
 		entry.applyN3(result)
+		entry.fullyUpdated = true // we already called fetchShortcodeData, which fetches the greatest amount of data possible. it's no use trying to fetch that again with .update().
 		return {post: entry, fromCache}
 	}
 }
@@ -407,23 +409,108 @@ async function getOrFetchShortcode(shortcode) {
  * @returns {Promise<{result: import("./types").TimelineEntryN3, fromCache: boolean}>}
  */
 function fetchShortcodeData(shortcode) {
-	// example actual query from web:
-	// query_hash=2b0673e0dc4580674a88d426fe00ea90&variables={"shortcode":"xxxxxxxxxxx","child_comment_count":3,"fetch_comment_count":40,"parent_comment_count":24,"has_threaded_comments":true}
-	// we will not include params about comments, which means we will not receive comments, but everything else should still work fine
-	const p = new URLSearchParams()
-	p.set("query_hash", constants.external.shortcode_query_hash)
-	p.set("variables", JSON.stringify({shortcode}))
+	// embed endpoint unfortunately only returns a single image, or a single video thumbnail
 	return requestCache.getOrFetchPromise("shortcode/"+shortcode, () => {
-		return switcher.request("post_graphql", `https://www.instagram.com/graphql/query/?${p.toString()}`, async res => {
-			if (res.status === 302) throw constants.symbols.INSTAGRAM_BLOCK_TYPE_DECEMBER
+		return switcher.request("post_graphql", `https://www.instagram.com/p/${shortcode}/embed/captioned/`, async res => {
 			if (res.status === 429) throw constants.symbols.RATE_LIMITED
-		}).then(res => res.json()).then(root => {
-			/** @type {import("./types").TimelineEntryN3} */
-			const data = root.data.shortcode_media
+		}).then(res => res.text()).then(text => {
+			let data = null
+			const match = text.match(/window\.__additionalDataLoaded\('extra',(.*)\);<\/script>/)
+			if (match) {
+				const textData = match[1]
+				data = JSON.parse(textData)
+			}
 			if (data == null) {
-				// the thing doesn't exist
-				throw constants.symbols.NOT_FOUND
+				// we have to actually parse the HTML to get the data
+				const root = fhp.parse(text)
+
+				// Check if post really exists
+				if (root.querySelector(".EmbedIsBroken")) {
+					throw constants.symbols.NOT_FOUND
+				}
+
+				// find embed
+				const e_embed = root.querySelector(".Embed")
+				// rate limited? if so, the request to instagram took 5-10 seconds, and returned no other content after <body style="background: white">
+				// so in that case there will be no useful elements, and no .Embed element
+				if (!e_embed) {
+					throw constants.symbols.RATE_LIMITED
+				}
+
+				// find avatar
+				const e_avatar = root.querySelector(".Avatar")
+				const e_avatarImage = e_avatar.querySelector("img")
+				// find username
+				const e_usernameText = root.querySelector(".UsernameText")
+				const e_viewProfile = root.querySelector(".ViewProfileButton")
+				// find verified
+				const e_verified = root.querySelector(".VerifiedSprite")
+				// find media
+				const e_media = root.querySelector(".EmbeddedMediaImage")
+				// find caption
+				const e_caption = root.querySelector(".Caption")
+				// extract owner
+				const owner = {
+					id: e_embed.attributes["data-owner-id"],
+					is_verified: !!e_verified,
+					profile_pic_url: e_avatarImage.attributes.src,
+					username: e_viewProfile.attributes.href.replace(new RegExp(`^https:\/\/www\.instagram\.com\/(${constants.external.username_regex}).*$`, "s"), "$1")
+				}
+				// extract media type
+				let mediaType = e_embed.attributes["data-media-type"]
+				const videoData = {}
+				if (mediaType === "GraphVideo") {
+					Object.assign(videoData, {
+						video_url: null,
+						video_view_count: null
+					})
+				} else {
+					mediaType = "GraphImage"
+				}
+				// extract display resources
+				const display_resources = e_media.attributes.srcset.split(",").map(source => {
+					source = source.trim()
+					const [url, widthString] = source.split(" ")
+					const width = +widthString.match(/\d+/)[0]
+					return {
+						src: url,
+						config_width: width,
+						config_height: width // best guess!
+					}
+				})
+				// extract caption text
+				let captionText = ""
+				if (e_caption) {
+					captionText = e_caption.childNodes.slice(4, -3).map(node => { // slice removes unneeded starting and ending whitespace and user handles
+						if (node.tagName === "br") {
+							return "\n"
+						} else {
+							return node.text
+						}
+					}).join("")
+				}
+				return {
+					__typename: mediaType,
+					id: e_embed.attributes["data-media-id"],
+					display_url: e_media.attributes.src,
+					display_resources,
+					is_video: mediaType === "GraphVideo",
+					shortcode,
+					accessibility_caption: e_media.attributes.alt,
+					...videoData,
+					owner,
+					edge_media_to_caption: {
+						edges: [
+							{
+								node: {
+									text: captionText
+								}
+							}
+						]
+					}
+				}
 			} else {
+				data = data.shortcode_media
 				history.report("post", true)
 				if (constants.caching.db_post_n3) {
 					db.prepare("REPLACE INTO Posts (shortcode, id, id_as_numeric, username, json) VALUES (@shortcode, @id, @id_as_numeric, @username, @json)")
@@ -440,7 +527,7 @@ function fetchShortcodeData(shortcode) {
 				return data
 			}
 		}).catch(error => {
-			if (error === constants.symbols.RATE_LIMITED || error === constants.symbols.INSTAGRAM_BLOCK_TYPE_DECEMBER) {
+			if (error === constants.symbols.RATE_LIMITED) {
 				history.report("post", false, error)
 			}
 			throw error

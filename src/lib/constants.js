@@ -28,6 +28,7 @@ let constants = {
 	tor: {
 		enabled: true, // If false, everything else in this block has no effect.
 		password: null, // If `null`, Bibliogram will run its own Tor process instead.
+		port: 9051, // If a password is provided, Bibliogram will connect to Tor on this port. (This is ignored when running its own Tor process.)
 		for: {
 			user_html: true,
 			timeline_graphql: false,
@@ -41,6 +42,11 @@ let constants = {
 	does_not_track: false,
 
 	allow_user_from_reel: "fallback", // one of: "never", "fallback", "prefer", "onlyPreferSaved", "preferForRSS"
+	proxy_media: { // Whether to proxy media (images, videos, thumbnails) through Bibliogram. This is strongly recommended to protect user privacy. If proxy is turned off, some browser content blockers may break all images since they are served from Facebook domains.
+		image: true,
+		video: true,
+		thumbnail: true
+	},
 
 	feeds: {
 		// Whether feeds are enabled.

@@ -15,8 +15,10 @@ if (!constants.language_dev) Object.assign(data, require("./en.js"))
 	data.about_bibliogram_header = "Bibliogram Hakkında"
 	data.pug_about_bibliogram_content = pug(`
 		p.
+
 			Bibliogram, Instagram'ın genel profil görünümlerinden veri alan ve daha hızlı yüklenen, indirilebilir resimler veren, 
 			reklamları ortadan kaldıran, RSS beslemeleri oluşturan ve sizi kaydolmaya teşvik etmeyen daha arkadaşça 
+
 			bir sayfaya yerleştiren bir web sitesidir. #[a(href=(link_to_featured_profiles ? "#featured-profiles" : "/u/instagram")).example-link Bir örneğe bakın.]
 		p.
 			Bibliogram, özel profilleri anonim olarak paylaşmanıza, beğenmenize, yorum yapmanıza, takip etmenize veya görüntülemenize izin #[em vermez].
@@ -26,6 +28,7 @@ if (!constants.language_dev) Object.assign(data, require("./en.js"))
 	data.onion_site_available = "Onion sitesi mevcut"
 	data.t_settings = "Ayarlar"
 	data.t_privacy_policy = "Gizlilik Politikası"
+
 	data.has_not_written_privacy_policy = "Sahibi gizlilik politikası yazmadı"
 	data.instance_not_blocked = "Örnek engellenmedi"
 	data.instance_partially_blocked = "Örnek kısmen engellendi"
@@ -53,6 +56,7 @@ if (!constants.language_dev) Object.assign(data, require("./en.js"))
 	data.tab_timeline = "Zaman çizelgesi"
 	data.tab_igtv = "IGTV"
 	data.next_page_button = "Sonraki Sayfa"
+
 	data.next_page_button_loading = "Yükleniyor..."
 	data.profile_is_private_notice = "Profil özeldir."
 	data.no_posts_notice = "Gönderi yok."
@@ -73,6 +77,7 @@ if (!constants.language_dev) Object.assign(data, require("./en.js"))
 	data.rewrite_twitter = "Twitter alanını yeniden yaz"
 	data.remove_trailing_hashtags = "Sondaki hashtagleri gizle"
 	data.t_hide = "Saklamak"
+
 	data.link_hashtags = "Tıklanabilir hashtagler"
 	data.t_clickable = "Tıklanabilir"
 	data.show_comments = "Yorumları görüntüle"
@@ -83,6 +88,7 @@ if (!constants.language_dev) Object.assign(data, require("./en.js"))
 	data.t_normal = "Normal"
 	data.t_eager = "İstekli"
 	data.t_manual = "Manuel"
+
 	data.t_appearance = "Görünüm"
 	data.t_theme = "Tema"
 	data.display_top_nav = "Üst çubuğu göster"
@@ -101,6 +107,7 @@ if (!constants.language_dev) Object.assign(data, require("./en.js"))
 	data.save_and_return = "Kaydet ve geri dön"
 	data.pug_restore_sync_settings = pug(`
 		| Kaydedilen ayarları şu şekilde geri yükleyebilir ve senkronize edebilirsiniz: #[a(href="/applysettings/"+token)#restore-link bu bağlantıya yer işareti koyma.]
+
 	`)
 	data.settings_saved = "Kaydedildi."
 

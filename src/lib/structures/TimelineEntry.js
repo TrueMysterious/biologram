@@ -19,6 +19,7 @@ each child in children
 class TimelineEntry extends TimelineBaseMethods {
 	constructor() {
 		super()
+		this.fullyUpdated = false
 		/** @type {import("../types").TimelineEntryAll} some properties may not be available yet! */
 		// @ts-ignore
 		this.data = {}
@@ -38,12 +39,16 @@ class TimelineEntry extends TimelineBaseMethods {
 	}
 
 	async update() {
-		return collectors.fetchShortcodeData(this.data.shortcode).then(data => {
-			this.applyN3(data.result)
-		}).catch(error => {
-			console.error("TimelineEntry could not self-update; trying to continue anyway...")
-			console.error("E:", error)
-		})
+		if (!this.fullyUpdated) {
+			return collectors.fetchShortcodeData(this.data.shortcode).then(data => {
+				this.applyN3(data.result)
+			}).catch(error => {
+				console.error("TimelineEntry could not self-update; trying to continue anyway...")
+				console.error("E:", error)
+			}).finally(() => {
+				this.fullyUpdated = true
+			})
+		}
 	}
 
 	/**
@@ -88,6 +93,7 @@ class TimelineEntry extends TimelineBaseMethods {
 	 * All mutations should act exactly once and have no effect on already mutated data.
 	 */
 	fixData() {
+		this.hasDate = !!this.data.taken_at_timestamp
 		this.date = new Date(this.data.taken_at_timestamp*1000)
 	}
 
@@ -154,7 +160,9 @@ class TimelineEntry extends TimelineBaseMethods {
 	getThumbnailSrcsetP() {
 		if (this.data.thumbnail_resources) {
 			return this.data.thumbnail_resources.map(tr => {
-				return `${proxyImage(tr.src, tr.config_width)} ${tr.config_width}w`
+				let src = tr.src
+				if (constants.proxy_media.thumbnail) src = proxyImage(tr.src, tr.config_width)
+				return `${src} ${tr.config_width}w`
 			}).join(", ")
 		} else {
 			return null
@@ -174,16 +182,20 @@ class TimelineEntry extends TimelineBaseMethods {
 				found = tr
 				if (tr.config_width >= size) break // don't proceed once we find one large enough
 			}
+			let src = found.src
+			if (constants.proxy_media.thumbnail) src = proxyImage(src, found.config_width) // force resize to config rather than requested
 			return {
 				config_width: found.config_width,
 				config_height: found.config_height,
-				src: proxyImage(found.src, found.config_width) // force resize to config rather than requested
+				src
 			}
 		} else if (this.data.thumbnail_src) {
+			let src = this.data.thumbnail_src
+			if (constants.proxy_media.thumbnail) src = proxyImage(src, size) // force resize to requested
 			return {
 				config_width: size, // probably?
 				config_height: size,
-				src: proxyImage(this.data.thumbnail_src, size) // force resize to requested
+				src
 			}
 		} else {
 			return null
@@ -231,7 +243,7 @@ class TimelineEntry extends TimelineBaseMethods {
 		let fromCache = true
 		const clone = await (async () => {
 			// Do we just already have the extended owner?
-			if (this.data.owner.full_name) { // this property is on extended owner and not basic owner
+			if (this.data.owner.profile_pic_url) { // this property is on extended owner and not basic owner
 				const clone = proxyExtendedOwner(this.data.owner)
 				this.ownerPfpCacheP = clone.profile_pic_url
 				return clone
@@ -240,7 +252,7 @@ class TimelineEntry extends TimelineBaseMethods {
 			else if (collectors.userRequestCache.getByID(this.data.owner.id)) {
 				/** @type {import("./User")} */
 				const user = collectors.userRequestCache.getByID(this.data.owner.id)
-				if (user.data.full_name !== undefined) {
+				if (user.data.profile_pic_url !== undefined) {
 					this.data.owner = {
 						id: user.data.id,
 						username: user.data.username,
